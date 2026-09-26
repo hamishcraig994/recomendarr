@@ -214,7 +214,8 @@ export function getConfigWithOverrides(overrides: Record<string, string> = {}): 
       url: withFallback(overrides.media_server_url, config.mediaServer.url),
       apiKey: withFallback(overrides.media_server_api_key, config.mediaServer.apiKey),
       userId: withFallback(overrides.media_server_user_id, config.mediaServer.userId),
-      plexToken: withFallback(overrides.plex_token, config.mediaServer.plexToken || config.mediaServer.apiKey),
+      // apiKey (Settings UI/DB) must win over plexToken (env/.env-only, no UI field) - see media-server.ts.
+      plexToken: withFallback(overrides.plex_token, config.mediaServer.apiKey || config.mediaServer.plexToken),
     },
     sonarr: {
       ...config.sonarr,

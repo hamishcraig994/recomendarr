@@ -98,7 +98,10 @@ class PlexConnector implements MediaServerConnector {
         this.client = axios.create({
             baseURL: cfg.url,
             headers: {
-                'X-Plex-Token': cfg.plexToken || cfg.apiKey,
+                // apiKey comes from the Settings UI/DB and is what users actually edit; plexToken has no UI
+                // field of its own and can only be set via the PLEX_TOKEN env var (or a baked-in .env file
+                // in a Docker image) - it must never win over a token the user configured through the app.
+                'X-Plex-Token': cfg.apiKey || cfg.plexToken,
                 Accept: 'application/json',
             },
         });
@@ -107,7 +110,13 @@ class PlexConnector implements MediaServerConnector {
     async testConnection(): Promise<boolean> {
         try {
             const res = await this.client.get('/');
-            const serverName = res.data?.MediaContainer?.friendlyName || 'Plex Server';
+            // A plain GET / returning 200 isn't proof this is actually Plex - lots of servers (e.g. Tautulli's
+            // own web UI) will happily respond 200 to this too. Require the shape only Plex's API returns.
+            if (!res.data?.MediaContainer) {
+                addLog({ level: 'ERROR', message: 'Failed to connect to Plex: response did not look like a Plex server (check the URL points at Plex, not another app)', source: 'plex' });
+                return false;
+            }
+            const serverName = res.data.MediaContainer.friendlyName || 'Plex Server';
             addLog({ level: 'INFO', message: `Connected to Plex: ${serverName}`, source: 'plex' });
             return true;
         } catch (err) {
@@ -151,7 +160,7 @@ class PlexConnector implements MediaServerConnector {
                         genres: item.Genre?.map((g: { tag: string }) => g.tag) || [],
                         lastPlayedDate: item.lastViewedAt ? new Date(item.lastViewedAt * 1000).toISOString() : undefined,
                         overview: item.summary,
-                        posterUrl: item.thumb ? `${this.cfg.url}${item.thumb}?X-Plex-Token=${this.cfg.plexToken || this.cfg.apiKey}` : undefined,
+                        posterUrl: item.thumb ? `${this.cfg.url}${item.thumb}?X-Plex-Token=${this.cfg.apiKey || this.cfg.plexToken}` : undefined,
                     });
                 }
             } catch (err) {
