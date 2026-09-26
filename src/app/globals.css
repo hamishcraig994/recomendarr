@@ -585,9 +585,18 @@ textarea {
 }
 
 .workspace-list,
-.recommendation-detail,
 .detail-empty {
   overflow: hidden;
+}
+
+/* Unlike .workspace-list, this has no inner *-scroll wrapper of its own, so it needs its own
+   scroll budget directly - otherwise content taller than the grid row (a long overview, several
+   signal chips, the two-column "learning"/"state" section, plus the action bar) is silently cut
+   off with no way to reach it, instead of scrolling into view. */
+.recommendation-detail {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 240px);
 }
 
 .workspace-list {
@@ -1613,7 +1622,8 @@ textarea {
     background: rgba(20, 24, 27, 0.98);
   }
 
-  .workspace-list-scroll {
+  .workspace-list-scroll,
+  .recommendation-detail {
     max-height: none;
     padding-right: 0;
   }
