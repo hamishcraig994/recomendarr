@@ -16,6 +16,26 @@ function getClient(override?: AppConfig['ai']): OpenAI {
     });
 }
 
+// OpenAI's newer "reasoning" models (o1, o3, gpt-5, ...) reject max_tokens outright and require
+// max_completion_tokens instead; older OpenAI models and most other OpenAI-compatible providers
+// (self-hosted, OpenRouter, etc.) still expect max_tokens. Rather than hardcode a list of model
+// names that will inevitably go stale as new models ship, try max_tokens first and only fall back
+// to max_completion_tokens when the API rejects it specifically for that reason.
+type ChatParams = OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+
+export async function createChatCompletion(client: OpenAI, params: ChatParams & { max_tokens: number }) {
+    const { max_tokens, ...rest } = params;
+    try {
+        return await client.chat.completions.create({ ...rest, max_tokens });
+    } catch (err) {
+        const message = (err as Error).message || '';
+        if (message.toLowerCase().includes('max_tokens') && message.toLowerCase().includes('max_completion_tokens')) {
+            return await client.chat.completions.create({ ...rest, max_completion_tokens: max_tokens });
+        }
+        throw err;
+    }
+}
+
 export interface TasteProfile {
     profile: string;
     keywords: string[];
@@ -69,7 +89,7 @@ export async function generateTasteProfile(watchHistory: WatchedItem[]): Promise
     const userPrompt = `WATCH HISTORY:\n${historyText}\n\nGenerate the Taste Profile JSON.`;
     
     try {
-        const response = await client.chat.completions.create({
+        const response = await createChatCompletion(client, {
             model: config.ai.model,
             messages: [
                 { role: 'system', content: TASTE_PROFILE_PROMPT },
@@ -194,7 +214,7 @@ ${filterInstructions ? 'Follow the filter constraints strictly.' : 'Recommend a 
     try {
         addLog({ level: 'INFO', message: `Requesting AI recommendations for ${historyContext.length} watched items`, source: 'ai' });
 
-        const response = await client.chat.completions.create({
+        const response = await createChatCompletion(client, {
             model: config.ai.model,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
@@ -252,7 +272,7 @@ export async function testAiConnection(override?: AppConfig['ai']): Promise<bool
     if (!ai.enabled || !ai.apiKey) return false;
     try {
         const client = getClient(ai);
-        await client.chat.completions.create({
+        await createChatCompletion(client, {
             model: ai.model,
             messages: [{ role: 'user', content: 'Say "ok"' }],
             max_tokens: 5,
